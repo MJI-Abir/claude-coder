@@ -1,25 +1,29 @@
 import * as vscode from "vscode";
 import { Anthropic } from "@anthropic-ai/sdk";
 import { readFile } from "fs/promises";
+import { normalize, join } from "path";
 
 // Maximum number of files to include in context
 const MAX_FILES = 10;
 // Maximum size of each file to include (in characters)
 const MAX_FILE_SIZE = 100000;
 
-let chatViewProvider: ChatViewProvider;
-
 export function activate(context: vscode.ExtensionContext) {
   console.log("Claude Coder extension is now active");
 
   // Create our custom WebView provider
-  chatViewProvider = new ChatViewProvider(context.extensionUri);
+  const chatViewProvider = new ChatViewProvider(context.extensionUri);
 
-  // Register the WebView provider
+  // Register the WebView provider - THIS IS THE CRITICAL PART
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
-      "claudeCoderChat",
-      chatViewProvider
+      "claudeCoderChat", // Make sure this matches exactly with the ID in package.json
+      chatViewProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true, // Keep the chat history when the panel is not visible
+        },
+      }
     )
   );
 
@@ -47,6 +51,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken
   ) {
+    console.log("Resolving WebView for Claude Coder");
     this._view = webviewView;
 
     // Set options for the webview
@@ -63,6 +68,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 
     // Handle messages from the webview
     webviewView.webview.onDidReceiveMessage(async (data) => {
+      console.log("Received message from webview:", data.type);
+
       switch (data.type) {
         case "sendMessage":
           await this.handleUserMessage(data.message);
@@ -78,6 +85,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private initializeApiClient() {
+    console.log("Initializing Anthropic API client");
     const config = vscode.workspace.getConfiguration("claudeCoder");
     const apiKey = config.get<string>("apiKey");
 
@@ -94,6 +102,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private createNewConversation() {
+    console.log("Creating new conversation");
     this._currentConversationId = `conversation-${Date.now()}`;
     this._conversations.set(this._currentConversationId, []);
 
@@ -168,6 +177,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  // Fix for the Anthropic API call - update the handleUserMessage method in your ChatViewProvider class
+
   private async handleUserMessage(message: string) {
     if (!this._anthropic) {
       vscode.window.showErrorMessage("Anthropic API client not initialized");
@@ -204,7 +215,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       const config = vscode.workspace.getConfiguration("claudeCoder");
       const model = config.get<string>("model") || "claude-3-7-sonnet-20250219";
 
-      // Prepare system message with context about being a coding assistant
+      // Prepare system message
       const systemMessage = `You are Claude Coder, an AI coding assistant embedded in VS Code. 
 You have access to the user's codebase and can help with writing, debugging, and improving code. 
 Be concise, helpful, and focus on providing working solutions. 
@@ -214,18 +225,31 @@ Here are some relevant files from the user's codebase to help you understand the
 
 ${filesContent}`;
 
-      // Create messages array for the API
-      const messages = [
-        { role: "system", content: systemMessage },
-        ...conversation,
+      // Create messages array for the API - FIXED FORMAT
+      const messageParams: { role: "user" | "assistant"; content: string }[] = [
+        {
+          role: "user",
+          content: message,
+        },
       ];
 
-      // Call the API
+      // Add previous conversation messages if any
+      const previousMessages = conversation.slice(0, -1); // Exclude the message we just added
+      if (previousMessages.length > 0) {
+        messageParams.unshift(...previousMessages);
+      }
+
+      console.log("Calling Anthropic API with model:", model);
+
+      // Call the API with the CORRECT FORMAT - system goes in its own parameter
       const response = await this._anthropic.messages.create({
         model,
-        messages,
+        system: systemMessage,
+        messages: messageParams,
         max_tokens: 4000,
       });
+
+      console.log("Received response from Anthropic API");
 
       // Add assistant response to conversation
       conversation.push({
@@ -250,7 +274,8 @@ ${filesContent}`;
         message: {
           role: "assistant",
           content:
-            "Sorry, I encountered an error while processing your request.",
+            "Sorry, I encountered an error while processing your request. " +
+            JSON.stringify(error),
         },
       });
     } finally {

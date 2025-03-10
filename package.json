@@ -6,11 +6,18 @@
   "engines": {
     "vscode": "^1.98.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MJI-Abir/claude-coder.git"
+  },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
-  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:claudeCoderChat",
+    "onCommand:claude-coder.startChat"
+  ],
+  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
@@ -30,8 +37,10 @@
     "views": {
       "claude-coder": [
         {
+          "type": "webview",
           "id": "claudeCoderChat",
-          "name": "Chat"
+          "name": "Chat",
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -52,11 +61,13 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "vscode:prepublish": "npm run webpack",
+    "webpack": "webpack --mode production",
+    "webpack:dev": "webpack --mode development",
+    "compile": "webpack --mode development",
+    "watch": "webpack --watch --mode development",
     "lint": "eslint src --ext ts",
+    "pretest": "npm run compile && npm run lint",
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {

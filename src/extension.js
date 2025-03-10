@@ -42,13 +42,17 @@ const promises_1 = require("fs/promises");
 const MAX_FILES = 10;
 // Maximum size of each file to include (in characters)
 const MAX_FILE_SIZE = 100000;
-let chatViewProvider;
 function activate(context) {
     console.log("Claude Coder extension is now active");
     // Create our custom WebView provider
-    chatViewProvider = new ChatViewProvider(context.extensionUri);
-    // Register the WebView provider
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider("claudeCoderChat", chatViewProvider));
+    const chatViewProvider = new ChatViewProvider(context.extensionUri);
+    // Register the WebView provider - THIS IS THE CRITICAL PART
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider("claudeCoderChat", // Make sure this matches exactly with the ID in package.json
+    chatViewProvider, {
+        webviewOptions: {
+            retainContextWhenHidden: true, // Keep the chat history when the panel is not visible
+        },
+    }));
     // Register the start chat command
     let startChatCommand = vscode.commands.registerCommand("claude-coder.startChat", () => {
         vscode.commands.executeCommand("workbench.view.extension.claude-coder");
@@ -65,6 +69,7 @@ class ChatViewProvider {
         this._extensionUri = _extensionUri;
     }
     resolveWebviewView(webviewView, context, _token) {
+        console.log("Resolving WebView for Claude Coder");
         this._view = webviewView;
         // Set options for the webview
         webviewView.webview.options = {
@@ -77,6 +82,7 @@ class ChatViewProvider {
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(async (data) => {
+            console.log("Received message from webview:", data.type);
             switch (data.type) {
                 case "sendMessage":
                     await this.handleUserMessage(data.message);
@@ -90,6 +96,7 @@ class ChatViewProvider {
         this.createNewConversation();
     }
     initializeApiClient() {
+        console.log("Initializing Anthropic API client");
         const config = vscode.workspace.getConfiguration("claudeCoder");
         const apiKey = config.get("apiKey");
         if (!apiKey) {
@@ -101,6 +108,7 @@ class ChatViewProvider {
         });
     }
     createNewConversation() {
+        console.log("Creating new conversation");
         this._currentConversationId = `conversation-${Date.now()}`;
         this._conversations.set(this._currentConversationId, []);
         if (this._view) {
@@ -200,12 +208,14 @@ ${filesContent}`;
                 { role: "system", content: systemMessage },
                 ...conversation,
             ];
+            console.log("Calling Anthropic API with model:", model);
             // Call the API
             const response = await this._anthropic.messages.create({
                 model,
                 messages,
                 max_tokens: 4000,
             });
+            console.log("Received response from Anthropic API");
             // Add assistant response to conversation
             conversation.push({
                 role: "assistant",
@@ -227,7 +237,8 @@ ${filesContent}`;
                 type: "messageReceived",
                 message: {
                     role: "assistant",
-                    content: "Sorry, I encountered an error while processing your request.",
+                    content: "Sorry, I encountered an error while processing your request. " +
+                        error,
                 },
             });
         }

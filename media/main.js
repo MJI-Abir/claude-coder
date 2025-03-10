@@ -7,36 +7,74 @@ let state = {
   isLoading: false,
 };
 
-// Initialize elements
-const messageInput = document.getElementById("message-input");
-const sendButton = document.getElementById("send-button");
-const chatContainer = document.getElementById("chat-container");
-const newChatButton = document.getElementById("new-chat-btn");
+// Log initialization to help with debugging
+console.log("Claude Coder WebView initialized");
 
-// Add event listeners
+// Initialize elements when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
+  console.log("DOM loaded, setting up event listeners");
+
+  // Get references to UI elements
+  const messageInput = document.getElementById("message-input");
+  const sendButton = document.getElementById("send-button");
+  const chatContainer = document.getElementById("chat-container");
+  const newChatButton = document.getElementById("new-chat-btn");
+
+  if (!messageInput || !sendButton || !chatContainer || !newChatButton) {
+    console.error("Failed to find UI elements");
+    return;
+  }
+
   // Send message on button click
-  sendButton.addEventListener("click", sendMessage);
+  sendButton.addEventListener("click", () => {
+    const message = messageInput.value.trim();
+    if (message && !state.isLoading) {
+      console.log("Sending message to extension:", message);
+      vscode.postMessage({
+        type: "sendMessage",
+        message,
+      });
+
+      // Clear input
+      messageInput.value = "";
+    }
+  });
 
   // Send message on Enter key (but allow Shift+Enter for new lines)
   messageInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      const message = messageInput.value.trim();
+      if (message && !state.isLoading) {
+        console.log("Sending message to extension (via Enter key):", message);
+        vscode.postMessage({
+          type: "sendMessage",
+          message,
+        });
+
+        // Clear input
+        messageInput.value = "";
+      }
     }
   });
 
   // Create new chat
   newChatButton.addEventListener("click", () => {
+    console.log("Creating new chat");
     vscode.postMessage({
       type: "createNewChat",
     });
   });
+
+  // Initial message in the chat
+  chatContainer.innerHTML =
+    '<div class="welcome-message">Welcome to Claude Coder! Ask me about your code.</div>';
 });
 
 // Handle messages from the extension
 window.addEventListener("message", (event) => {
   const message = event.data;
+  console.log("Received message from extension:", message.type);
 
   switch (message.type) {
     case "messageReceived":
@@ -53,29 +91,21 @@ window.addEventListener("message", (event) => {
     case "conversationCreated":
       // Clear the UI for a new conversation
       state.messages = [];
-      chatContainer.innerHTML = "";
+      document.getElementById("chat-container").innerHTML = "";
       break;
   }
 });
-
-// Send message to extension
-function sendMessage() {
-  const message = messageInput.value.trim();
-  if (message && !state.isLoading) {
-    vscode.postMessage({
-      type: "sendMessage",
-      message,
-    });
-
-    // Clear input
-    messageInput.value = "";
-  }
-}
 
 // Add a message to the UI
 function addMessageToUI(message) {
   // Add to state
   state.messages.push(message);
+
+  const chatContainer = document.getElementById("chat-container");
+  if (!chatContainer) {
+    console.error("Chat container not found");
+    return;
+  }
 
   // Create message element
   const messageElement = document.createElement("div");
@@ -157,6 +187,12 @@ function highlightCodeBlocks(element) {
 
 // Update UI based on loading state
 function updateLoadingState() {
+  const sendButton = document.getElementById("send-button");
+  if (!sendButton) {
+    console.error("Send button not found");
+    return;
+  }
+
   if (state.isLoading) {
     sendButton.disabled = true;
     sendButton.textContent = "...";
