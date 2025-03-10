@@ -1,6 +1,6 @@
 # Claude Coder - VS Code Extension
 
-![Claude Coder Icon](https://github.com/yourusername/claude-coder/raw/main/resources/icon.png)
+![Claude Coder Icon](https://github.com/MJI-Abir/claude-coder/blob/main/resources/icon.svg)
 
 ## Overview
 
